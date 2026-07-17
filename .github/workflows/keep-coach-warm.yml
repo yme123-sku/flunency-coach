@@ -1,0 +1,20 @@
+name: Keep Edge Functions warm
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch:         # lets you trigger it manually from the Actions tab too
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping coach (cheap OPTIONS request, no Gemini call)
+        run: |
+          curl -s -o /dev/null -w "coach: %{http_code}\n" \
+            -X OPTIONS https://gvpuyyycfnjdjevdpxqu.supabase.co/functions/v1/coach
+
+      - name: Ping tts (cheap OPTIONS request, no TTS call)
+        run: |
+          curl -s -o /dev/null -w "tts: %{http_code}\n" \
+            -X OPTIONS https://gvpuyyycfnjdjevdpxqu.supabase.co/functions/v1/tts
