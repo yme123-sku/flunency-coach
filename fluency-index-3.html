@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Fluency"/>
+<title>Fluency Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --night:#161a35; --night-2:#22265a;
+    --parchment:#fdf6e8; --parchment-2:#f4e9d0;
+    --gold:#f0ac3f; --coral:#ff6f59; --teal:#49c6b8;
+    --ink:#2b2440; --muted:#8b8298;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    font-family:'Nunito', sans-serif; background: var(--night); color: var(--ink);
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:16px; overflow-x:hidden;
+  }
+  ::-webkit-scrollbar{ width:3px; }
+  ::-webkit-scrollbar-thumb{ background:#00000022; border-radius:2px; }
+
+  @keyframes float{ 0%,100%{transform:translateY(0) rotate(-2deg);} 50%{transform:translateY(-14px) rotate(2deg);} }
+  @keyframes rise{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes bounce{ 0%,60%,100%{transform:translateY(0); opacity:.4} 30%{transform:translateY(-5px); opacity:1} }
+  @keyframes pulseMic{ 0%,100%{box-shadow:0 0 0 0 rgba(255,111,89,.5);} 50%{box-shadow:0 0 0 8px rgba(255,111,89,0);} }
+
+  #app{
+    width:100%; max-width:480px; height:min(860px, 96vh);
+    background: var(--parchment); border-radius:28px; overflow:hidden;
+    display:flex; flex-direction:column; position:relative;
+    box-shadow: 0 30px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05);
+  }
+
+  /* ---------- PASSWORD ---------- */
+  #password-screen{
+    position:fixed; inset:0; background: var(--night); z-index:9999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+  }
+  #password-screen h2{ font-family:'Fredoka',sans-serif; font-size:24px; color:#fdf6e8; letter-spacing:.04em; }
+  #password-screen p{ color:#8b93c9; font-size:13px; }
+  #pass-input{
+    background:#1d2150; border:1.5px solid #33397a; border-radius:12px;
+    padding:12px 20px; color:#fdf6e8; font-size:20px; letter-spacing:.35em;
+    font-family:'Nunito',sans-serif; text-align:center; width:180px;
+  }
+  #pass-input:focus{ outline:none; border-color: var(--gold); }
+  #pass-btn{
+    background: var(--gold); border:none; border-radius:14px; color:#20163a;
+    font-family:'Fredoka',sans-serif; font-weight:600; font-size:14px;
+    padding:12px 30px; cursor:pointer;
+  }
+  #pass-error{ color: var(--coral); font-size:12px; display:none; font-weight:700; }
+
+  /* ---------- SCENE ---------- */
+  .scene{
+    position:relative; height:36%; min-height:200px; overflow:hidden; flex-shrink:0;
+    background: radial-gradient(circle at 50% 30%, var(--night-2), var(--night) 75%);
+    transition: background 900ms ease;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .scene .icon{
+    font-size:80px; filter: drop-shadow(0 10px 30px rgba(0,0,0,.5));
+    animation: float 4.5s ease-in-out infinite; z-index:3;
+  }
+  .particle{ position:absolute; border-radius:50%; opacity:.7; pointer-events:none; }
+  .scene-caption{
+    position:absolute; bottom:12px; left:0; right:0; text-align:center;
+    font-family:'Fredoka', sans-serif; font-weight:600; letter-spacing:.06em;
+    text-transform:uppercase; font-size:10.5px; color:rgba(255,255,255,.55); z-index:3;
+  }
+  .thread{ position:absolute; top:14px; left:0; right:0; display:flex; justify-content:center; gap:6px; z-index:4; }
+  .bead{ width:7px; height:7px; border-radius:50%; background:rgba(255,255,255,.22); transition:all 300ms ease; }
+  .bead.lit{ background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+  .mute-btn{
+    position:absolute; top:12px; right:14px; z-index:5;
+    background: rgba(255,255,255,.12); border:none; border-radius:999px;
+    width:34px; height:34px; font-size:16px; cursor:pointer; color:#fff;
+  }
+
+  /* ---------- STORY PANEL ---------- */
+  .panel{
+    flex:1; overflow-y:auto; padding:22px 20px 14px;
+    background: linear-gradient(180deg, var(--parchment), var(--parchment-2));
+  }
+  .msg{ margin-bottom:16px; animation: rise 400ms ease; }
+  .narrator{
+    font-family:'Fredoka', sans-serif; font-size:16.5px; line-height:1.55;
+    border-left:3px solid var(--gold); padding-left:12px;
+  }
+  .speak-line{ background:transparent; border:none; cursor:pointer; font-size:14px; opacity:.5; margin-top:4px; padding-left:12px; }
+
+  /* ---------- TAPPABLE ACTIONS ---------- */
+  .actions{ display:flex; flex-wrap:wrap; gap:8px; padding:10px 0 0 12px; }
+  .action-chip{
+    border:none; background:#fff; padding:8px 13px; border-radius:999px;
+    font-family:'Nunito',sans-serif; font-weight:800; font-size:13.5px; cursor:pointer;
+    box-shadow: 0 2px 0 rgba(0,0,0,.08); color: var(--ink);
+    transition: transform 120ms ease, background 120ms ease;
+  }
+  .action-chip:active{ transform: translateY(1px) scale(.97); background: var(--gold); }
+  .action-chip:disabled{ opacity:.45; }
+  .user-line{ display:flex; justify-content:flex-end; }
+  .user-bubble{
+    background: var(--night); color:#fff; padding:10px 15px;
+    border-radius:16px 16px 4px 16px; max-width:80%; font-weight:700; font-size:15px;
+  }
+  .typing{ display:flex; gap:4px; padding-left:12px; }
+  .typing span{ width:6px; height:6px; border-radius:50%; background: var(--gold); animation: bounce 1.2s infinite; }
+  .typing span:nth-child(2){ animation-delay:.15s; }
+  .typing span:nth-child(3){ animation-delay:.3s; }
+
+  /* ---------- SPARK ---------- */
+  .spark{ padding:8px 4px 4px; }
+  .spark h2{ font-family:'Fredoka',sans-serif; font-size:20px; margin-bottom:4px; }
+  .spark p{ color:#6b6280; font-size:14px; margin-bottom:14px; }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    border:none; background:#fff; padding:9px 14px; border-radius:999px;
+    font-family:'Nunito',sans-serif; font-weight:800; font-size:14px; cursor:pointer;
+    box-shadow: 0 2px 0 rgba(0,0,0,.08); transition: transform 120ms ease;
+  }
+  .chip:hover{ transform: translateY(-2px); }
+  #continue-wrap{ margin-top:16px; display:flex; flex-direction:column; gap:6px; }
+  #continue-btn{
+    background:transparent; border:1.5px solid #00000022; border-radius:999px;
+    color:#6b6280; font-family:'Nunito',sans-serif; font-weight:700; font-size:13px;
+    padding:9px 16px; cursor:pointer; width:fit-content;
+  }
+  #continue-info{ font-size:11px; color:#a89fbe; }
+
+  /* ---------- INPUT ---------- */
+  .inputbar{ display:none; gap:8px; padding:14px 16px calc(14px + env(safe-area-inset-bottom)); background: var(--parchment-2); border-top:1px solid rgba(0,0,0,.06); }
+  .inputbar input{
+    flex:1; border:none; border-radius:14px; padding:12px 14px; font-size:15px;
+    font-family:'Nunito',sans-serif; background:#fff; box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.05);
+  }
+  .inputbar input:focus{ outline:2px solid var(--gold); }
+  .inputbar button{ background: var(--coral); color:#fff; border:none; border-radius:14px; padding:0 18px; font-family:'Fredoka',sans-serif; font-weight:600; font-size:15px; cursor:pointer; }
+  .inputbar button:disabled{ opacity:.5; cursor:default; }
+  #mic-btn{
+    background:#fff; border:none; border-radius:14px; width:46px; font-size:18px; cursor:pointer;
+    flex-shrink:0; box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.05); transition: background 150ms ease, transform 150ms ease;
+  }
+  #mic-btn.listening{ background: var(--coral); transform: scale(1.06); animation: pulseMic 1s infinite; }
+  #mic-hint{ position:absolute; bottom:76px; left:0; right:0; text-align:center; font-size:11px; color: var(--coral); font-weight:700; display:none; pointer-events:none; }
+  #mic-hint.visible{ display:block; }
+
+  .end-card{ text-align:center; padding:26px 10px; font-family:'Fredoka',sans-serif; }
+  .end-card .icon{ font-size:40px; }
+  .restart{ margin-top:12px; background: var(--teal); border:none; color:#fff; padding:10px 20px; border-radius:999px; font-family:'Fredoka',sans-serif; font-weight:600; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div id="password-screen">
+  <div style="font-size:48px">🎙️</div>
+  <h2>FLUENCY ENGINE</h2>
+  <p>Enter access code to continue</p>
+  <input id="pass-input" type="password" placeholder="••••" maxlength="4" onkeydown="if(event.key==='Enter') checkPass()"/>
+  <button id="pass-btn" onclick="checkPass()">ENTER →</button>
+  <div id="pass-error">Wrong code. Try again.</div>
+</div>
+
+<div id="app">
+  <div class="scene" id="scene">
+    <div class="thread" id="thread"></div>
+    <button class="mute-btn" id="muteBtn" title="Toggle narrator voice">🔊</button>
+    <div class="icon" id="sceneIcon">📖</div>
+    <div class="scene-caption" id="sceneCaption">your story is waiting</div>
+  </div>
+  <div class="panel" id="panel"></div>
+  <div class="inputbar" id="inputbar">
+    <button id="mic-btn" title="Speak your move">🎤</button>
+    <input id="userInput" type="text" placeholder="Type what you do or say…"/>
+    <button id="sendBtn">Go</button>
+  </div>
+  <div id="mic-hint">🔴 Listening… tap again when done</div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://gvpuyyycfnjdjevdpxqu.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_nPodW5LfPGHCsaNI71KW6Q_X6UqL4-_";
+const MAX_TURNS = 18;
+
+const THEMES = {
+  pirate:  { bg:'radial-gradient(circle at 50% 25%, #1a4d63, #0c2431 75%)', icon:'🏴‍☠️', caption:'the high seas', particle:'wave' },
+  ocean:   { bg:'radial-gradient(circle at 50% 25%, #0c5b73, #0a2333 75%)', icon:'🌊', caption:'deep blue world', particle:'wave' },
+  forest:  { bg:'radial-gradient(circle at 50% 25%, #1f4d2e, #0f2417 75%)', icon:'🌲', caption:'the whispering woods', particle:'leaf' },
+  space:   { bg:'radial-gradient(circle at 50% 25%, #2b1d5e, #0b0a24 75%)', icon:'🚀', caption:'far beyond the stars', particle:'star' },
+  mystery: { bg:'radial-gradient(circle at 50% 25%, #3a2a4d, #171022 75%)', icon:'🔦', caption:'something is hidden here', particle:'star' },
+  castle:  { bg:'radial-gradient(circle at 50% 25%, #5c2a3a, #200e17 75%)', icon:'🏰', caption:'the old kingdom', particle:'star' },
+  city:    { bg:'radial-gradient(circle at 50% 25%, #2a3a5c, #0d1424 75%)', icon:'🌆', caption:'the city never sleeps', particle:'star' },
+  dragon:  { bg:'radial-gradient(circle at 50% 25%, #5c3a1a, #241505 75%)', icon:'🐉', caption:'here be dragons', particle:'ember' },
+  default: { bg:'radial-gradient(circle at 50% 30%, #22265a, #161a35 75%)', icon:'📖', caption:'your story is waiting', particle:'star' },
+};
+
+let state = { turn:0, theme:'default', history:[] };
+
+const panel = document.getElementById('panel');
+const scene = document.getElementById('scene');
+const sceneIcon = document.getElementById('sceneIcon');
+const sceneCaption = document.getElementById('sceneCaption');
+const thread = document.getElementById('thread');
+const inputbar = document.getElementById('inputbar');
+const userInput = document.getElementById('userInput');
+const sendBtn = document.getElementById('sendBtn');
+const micBtn = document.getElementById('mic-btn');
+const muteBtn = document.getElementById('muteBtn');
+
+// ── PASSWORD ──────────────────────────────────────────────────
+function checkPass(){
+  const val = document.getElementById('pass-input').value;
+  if(val === '1982'){
+    document.getElementById('password-screen').style.display = 'none';
+    showSpark();
+  } else {
+    document.getElementById('pass-error').style.display = 'block';
+    document.getElementById('pass-input').value = '';
+    document.getElementById('pass-input').focus();
+  }
+}
+
+// ── SCENE / PROGRESS ──────────────────────────────────────────
+function renderThread(){
+  thread.innerHTML = '';
+  const dots = 10;
+  const lit = Math.round((state.turn / MAX_TURNS) * dots);
+  for(let i=0;i<dots;i++){
+    const b = document.createElement('div');
+    b.className = 'bead' + (i < lit ? ' lit' : '');
+    thread.appendChild(b);
+  }
+}
+function setTheme(key){
+  const t = THEMES[key] || THEMES.default;
+  scene.style.background = t.bg;
+  sceneIcon.textContent = t.icon;
+  sceneCaption.textContent = t.caption;
+  spawnParticles(t.particle);
+  state.theme = key;
+}
+function spawnParticles(kind){
+  scene.querySelectorAll('.particle').forEach(p=>p.remove());
+  for(let i=0;i<10;i++){
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = kind==='leaf' ? (6+Math.random()*6) : (2+Math.random()*3);
+    p.style.width = size+'px'; p.style.height = size+'px';
+    p.style.left = Math.random()*100+'%'; p.style.top = Math.random()*100+'%';
+    let color = kind==='leaf' ? '#8fd19e' : kind==='wave' ? '#7fd8e8' : kind==='ember' ? '#ffb066' : '#ffffff';
+    p.style.background = color;
+    const dur = 3+Math.random()*4;
+    p.style.animation = `float ${dur}s ease-in-out infinite`;
+    p.style.animationDelay = (Math.random()*3)+'s';
+    scene.insertBefore(p, sceneIcon);
+  }
+}
+
+// ── TTS (Google Cloud, via existing Edge Function) ───────────
+let _currentAudio = null;
+let _audioCtx = null;
+let voiceOn = true;
+function unlockAudio(){ if(_audioCtx) return; try{ _audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+async function speak(text){
+  if(!voiceOn || !text) return;
+  try{
+    if(_currentAudio){ _currentAudio.pause(); _currentAudio = null; }
+    const controller = new AbortController();
+    const timeout = setTimeout(()=>controller.abort(), 15000);
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ text }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if(!res.ok){ console.error("TTS error:", res.status, await res.text()); return; }
+    const data = await res.json();
+    if(!data.audio){ console.error("TTS: no audio"); return; }
+    _currentAudio = new Audio(`data:audio/mp3;base64,${data.audio}`);
+    const p = _currentAudio.play();
+    if(p !== undefined) p.catch(()=>{ state.pendingSpeech = _currentAudio; });
+  }catch(e){ console.error("TTS fatal:", e); }
+}
+muteBtn.addEventListener('click', ()=>{
+  voiceOn = !voiceOn;
+  muteBtn.textContent = voiceOn ? '🔊' : '🔇';
+  if(!voiceOn && _currentAudio) _currentAudio.pause();
+});
+function speakNow(btn){ unlockAudio(); const t = btn.getAttribute('data-text'); if(t) speak(t); }
+
+// ── STT (Web Speech API) ─────────────────────────────────────
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognizer = null, recording = false, silenceTimer = null;
+const SILENCE_MS = 2200; // gives kids room to pause mid-sentence without getting cut off
+if(SR){
+  recognizer = new SR();
+  recognizer.lang = 'en-US';
+  recognizer.continuous = true;
+  recognizer.interimResults = true;
+  recognizer.onresult = (e)=>{
+    let transcript = '';
+    for(let i=0;i<e.results.length;i++) transcript += e.results[i][0].transcript;
+    userInput.value = transcript;
+    // every new bit of speech pushes back the "are they done?" timer
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(()=>{ if(recognizer && recording) recognizer.stop(); }, SILENCE_MS);
+  };
+  recognizer.onstart = ()=>{ document.getElementById('mic-hint').classList.add('visible'); };
+  recognizer.onend = ()=>{
+    recording=false;
+    micBtn.classList.remove('listening');
+    document.getElementById('mic-hint').classList.remove('visible');
+    clearTimeout(silenceTimer);
+    if(userInput.value.trim()) setTimeout(()=> sendBtn.click(), 150);
+  };
+  recognizer.onerror = ()=>{ recording=false; micBtn.classList.remove('listening'); document.getElementById('mic-hint').classList.remove('visible'); clearTimeout(silenceTimer); };
+}else{
+  micBtn.style.opacity='.4'; micBtn.title='Voice input not supported in this browser';
+}
+micBtn.addEventListener('click', ()=>{
+  unlockAudio();
+  if(!recognizer) return;
+  if(recording){ recognizer.stop(); return; } // tap again = "I'm done talking"
+  speechSynthesisCancelSafe();
+  userInput.value = '';
+  try{ recording=true; micBtn.classList.add('listening'); recognizer.start(); }
+  catch(e){ recording=false; micBtn.classList.remove('listening'); }
+});
+function speechSynthesisCancelSafe(){ if(_currentAudio) _currentAudio.pause(); }
+
+// ── MESSAGES ──────────────────────────────────────────────────
+function addNarrator(text, actions){
+  panel.querySelectorAll('.action-chip').forEach(c=> c.disabled = true);
+  const div = document.createElement('div');
+  div.className = 'msg narrator';
+  div.textContent = text;
+  panel.appendChild(div);
+  const btn = document.createElement('button');
+  btn.className = 'speak-line';
+  btn.textContent = '🔊';
+  btn.setAttribute('data-text', text);
+  btn.onclick = ()=>speakNow(btn);
+  panel.appendChild(btn);
+  if(Array.isArray(actions) && actions.length){
+    const row = document.createElement('div');
+    row.className = 'actions';
+    actions.forEach(a=>{
+      const chip = document.createElement('button');
+      chip.className = 'action-chip';
+      chip.textContent = a;
+      chip.addEventListener('click', ()=>{
+        row.querySelectorAll('.action-chip').forEach(c=> c.disabled = true);
+        sendTurn(a, false);
+      });
+      row.appendChild(chip);
+    });
+    panel.appendChild(row);
+  }
+  panel.scrollTop = panel.scrollHeight;
+  speak(text);
+}
+function addUser(text){
+  const wrap = document.createElement('div');
+  wrap.className = 'msg user-line';
+  const b = document.createElement('div');
+  b.className = 'user-bubble';
+  b.textContent = text;
+  wrap.appendChild(b);
+  panel.appendChild(wrap);
+  panel.scrollTop = panel.scrollHeight;
+}
+function addTyping(){
+  const div = document.createElement('div');
+  div.className = 'msg typing'; div.id = 'typingIndicator';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  panel.appendChild(div);
+  panel.scrollTop = panel.scrollHeight;
+}
+function removeTyping(){ const t = document.getElementById('typingIndicator'); if(t) t.remove(); }
+
+// ── SPARK SCREEN ──────────────────────────────────────────────
+function showSpark(){
+  inputbar.style.display = 'none';
+  panel.innerHTML = '';
+  const last = loadLastSession();
+  const div = document.createElement('div');
+  div.className = 'spark';
+  div.innerHTML = `
+    <h2>Pick your world</h2>
+    <p>Tap one to begin your story.</p>
+    <div class="chips">
+      <button class="chip" data-t="pirate">🏴‍☠️ Pirates</button>
+      <button class="chip" data-t="space">🚀 Space</button>
+      <button class="chip" data-t="forest">🌲 Forest</button>
+      <button class="chip" data-t="mystery">🔦 Mystery</button>
+      <button class="chip" data-t="dragon">🐉 Dragons</button>
+      <button class="chip" data-t="city">🌆 City</button>
+    </div>`;
+  panel.appendChild(div);
+  div.querySelectorAll('.chip').forEach(btn=>{
+    btn.addEventListener('click', ()=> startStory(btn.dataset.t, btn.textContent.trim()));
+  });
+  if(last && last.history && last.history.length > 1){
+    const wrap = document.createElement('div');
+    wrap.id = 'continue-wrap';
+    wrap.innerHTML = `<button id="continue-btn">↩ Continue last story</button>
+      <div id="continue-info">Turn ${last.turn} of ${MAX_TURNS}</div>`;
+    panel.appendChild(wrap);
+    document.getElementById('continue-btn').addEventListener('click', continueSession);
+  }
+  setTheme('default');
+  renderThread();
+}
+
+async function startStory(themeKey, label){
+  setTheme(themeKey);
+  panel.innerHTML = '';
+  inputbar.style.display = 'flex';
+  state.turn = 0;
+  state.history = [];
+  await sendTurn(`I want a ${label} story.`, true);
+}
+
+function continueSession(){
+  const last = loadLastSession();
+  if(!last) return;
+  state = { turn:last.turn, theme:last.theme||'default', history:last.history };
+  panel.innerHTML = '';
+  inputbar.style.display = 'flex';
+  setTheme(state.theme);
+  renderThread();
+  state.history.forEach(m=>{
+    if(m.role === 'user') addUserSilent(m.content);
+    else addNarratorSilent(m.content);
+  });
+}
+function addUserSilent(text){ const wrap=document.createElement('div'); wrap.className='msg user-line'; const b=document.createElement('div'); b.className='user-bubble'; b.textContent=text; wrap.appendChild(b); panel.appendChild(wrap); }
+function addNarratorSilent(text){ const div=document.createElement('div'); div.className='msg narrator'; div.textContent=text; panel.appendChild(div); }
+
+// ── CORE TURN LOOP ────────────────────────────────────────────
+async function sendTurn(userText, isFirst){
+  if(!isFirst) addUser(userText);
+  state.history.push({ role:'user', content:userText });
+  state.turn++;
+  renderThread();
+  addTyping();
+  sendBtn.disabled = true;
+  micBtn.disabled = true;
+
+  try{
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/coach`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        history: state.history.slice(-8),
+        turnCount: state.turn,
+        maxTurns: MAX_TURNS,
+      }),
+    });
+    const data = await res.json();
+    removeTyping();
+    if(data.error) throw new Error(data.error);
+
+    const theme = THEMES[data.theme] ? data.theme : state.theme;
+    setTheme(theme);
+    addNarrator(data.message, data.actions);
+    state.history.push({ role:'assistant', content:data.message });
+
+    saveSession();
+
+    if(state.turn >= MAX_TURNS) endStory();
+  }catch(e){
+    removeTyping();
+    addNarratorSilent("(The story pauses for a moment... try sending your message again.)");
+  }
+  sendBtn.disabled = false;
+  micBtn.disabled = false;
+}
+
+function endStory(){
+  inputbar.style.display = 'none';
+  panel.querySelectorAll('.action-chip').forEach(c=> c.disabled = true);
+  const div = document.createElement('div');
+  div.className = 'msg end-card';
+  div.innerHTML = `<div class="icon">✨</div><div>Episode complete!</div><button class="restart" id="restartBtn">New story</button>`;
+  panel.appendChild(div);
+  panel.scrollTop = panel.scrollHeight;
+  document.getElementById('restartBtn').addEventListener('click', ()=>{
+    state = { turn:0, theme:'default', history:[] };
+    clearSession();
+    showSpark();
+  });
+}
+
+sendBtn.addEventListener('click', ()=>{
+  const val = userInput.value.trim();
+  if(!val || sendBtn.disabled) return;
+  userInput.value = '';
+  sendTurn(val, false);
+});
+userInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') sendBtn.click(); });
+
+// ── SESSION PERSISTENCE (silent, no UI exposure) ─────────────
+const SESSION_KEY = 'fluency_story_session';
+function saveSession(){
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify({ turn:state.turn, theme:state.theme, history:state.history, savedAt:new Date().toISOString() })); }catch(e){}
+}
+function loadLastSession(){
+  try{ const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+}
+function clearSession(){ try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
+
+if(window.speechSynthesis) speechSynthesis.getVoices();
+</script>
+</body>
+</html>
