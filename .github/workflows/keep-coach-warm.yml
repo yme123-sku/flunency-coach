@@ -1,10 +1,9 @@
 name: Keep Edge Functions warm
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'   # every 5 minutes
-  workflow_dispatch:         # lets you trigger it manually from the Actions tab too
-
+  # schedule:
+  #   - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch:
 jobs:
   ping:
     runs-on: ubuntu-latest
