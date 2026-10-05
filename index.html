@@ -148,6 +148,47 @@
   .end-card{ text-align:center; padding:26px 10px; font-family:'Fredoka',sans-serif; }
   .end-card .icon{ font-size:40px; }
   .restart{ margin-top:12px; background: var(--teal); border:none; color:#fff; padding:10px 20px; border-radius:999px; font-family:'Fredoka',sans-serif; font-weight:600; cursor:pointer; }
+
+  /* ---------- STAGE (v5: animated Juno, pirate world) ---------- */
+  #app.stage-mode .scene{ height:58%; }
+  #app.stage-mode .scene .icon, #app.stage-mode .scene .scene-caption, #app.stage-mode .particle{ display:none; }
+  .stage{ position:absolute; inset:0; overflow:hidden; background:#1b120b; display:none; z-index:2; }
+  #app.stage-mode .stage{ display:block; }
+  .stage .world{ position:absolute; }
+  .stage .layer{ position:absolute; inset:0; }
+  .stage .zoomL{ transition: transform 1.4s cubic-bezier(.3,.6,.2,1); transform-origin: 50% 32%; }
+  .stage .zoomL.close{ transform: scale(1.3); }
+  @keyframes stShake{ 0%,100%{transform:translate(0,0)} 15%{transform:translate(-1.2%,.6%)} 30%{transform:translate(1.1%,-.5%)} 45%{transform:translate(-.8%,.4%)} 60%{transform:translate(.6%,-.3%)} 80%{transform:translate(-.3%,.2%)} }
+  .stage .shakeL.on{ animation: stShake .55s ease-out; }
+  @keyframes kenburns{ from{ transform: scale(1) translate(0,0); } to{ transform: scale(1.045) translate(-.7%,-.5%); } }
+  .stage .camL{ animation: kenburns 26s ease-in-out infinite alternate; transform-origin: 50% 45%; }
+  .stage .bgimg{ width:100%; height:100%; display:block; user-select:none; -webkit-user-drag:none; }
+  .stage .glow{ background: radial-gradient(circle at 34.4% 13.3%, rgba(255,196,110,.42) 0%, rgba(255,170,80,.14) 22%, rgba(255,150,60,0) 42%); mix-blend-mode: screen; pointer-events:none; transition: opacity .12s linear; }
+  .stage canvas{ width:100%; height:100%; pointer-events:none; }
+  .stage .dark{ background: rgba(8,6,20,.82); opacity:0; transition: opacity .25s ease; pointer-events:none; }
+  .stage .vig{ background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,.45) 100%); pointer-events:none; }
+  .stage .flash{ background:#fff; opacity:0; pointer-events:none; }
+  @keyframes stFlash{ 0%{opacity:0} 8%{opacity:.85} 16%{opacity:.1} 26%{opacity:.7} 60%{opacity:0} 100%{opacity:0} }
+  .stage .flash.on{ animation: stFlash .9s ease-out; }
+  .stage .juno{ position:absolute; left:32%; width:36%; bottom:6.5%; aspect-ratio: 431 / 1100; }
+  .stage .jE, .stage .jB, .stage .jR{ position:absolute; inset:0; transform-origin: 50% 100%; }
+  .stage .jR{ animation: breath 3.6s ease-in-out infinite, sway 7.5s ease-in-out infinite; }
+  .stage .jR.slow{ animation-duration: 5.5s, 9s; }
+  @keyframes breath{ 0%,100%{ scale: 1 1; } 50%{ scale: .996 1.012; } }
+  @keyframes sway{ 0%,100%{ rotate: -.4deg; } 50%{ rotate: .4deg; } }
+  .stage .spr{ position:absolute; inset:0; width:100%; height:100%; opacity:0; transition: opacity .16s linear; user-select:none; -webkit-user-drag:none; }
+  .stage .spr.instant{ transition:none; }
+  .stage .jE.e-scared{ animation: tremble .09s linear infinite alternate; }
+  @keyframes tremble{ from{ translate:-0.35% 0; } to{ translate:.35% 0; } }
+  .stage .jE.e-excited{ animation: bounce .42s ease-out 3; }
+  @keyframes bounce{ 0%,100%{ translate:0 0; } 45%{ translate:0 -3.2%; } }
+  .stage .jE.e-happy{ animation: hop .55s ease-out 1; }
+  @keyframes hop{ 0%,100%{ translate:0 0; } 40%{ translate:0 -2%; } }
+  .stage .jE.e-surprised{ animation: jump .38s cubic-bezier(.2,.8,.3,1) 1; }
+  @keyframes jump{ 0%{ translate:0 0; } 35%{ translate:0 -2.6%; } 100%{ translate:0 0; } }
+  .stage .jE.e-sad, .stage .jE.e-confess{ translate:0 .8%; transition: translate .6s ease; }
+  .stage .jE.e-shy{ animation: shysway 2.4s ease-in-out infinite; }
+  @keyframes shysway{ 0%,100%{ rotate:-1deg; } 50%{ rotate:1deg; } }
 </style>
 </head>
 <body>
@@ -163,6 +204,19 @@
 
 <div id="app">
   <div class="scene" id="scene">
+    <div class="stage" id="stage">
+      <div class="world" id="stWorld">
+        <div class="layer zoomL" id="stZoom"><div class="layer shakeL" id="stShake"><div class="layer camL">
+          <img class="bgimg" id="stBg" alt=""/>
+          <div class="layer glow" id="stGlow"></div>
+          <canvas class="layer" id="stDust"></canvas>
+          <div class="juno"><div class="jE" id="stE"><div class="jB" id="stB"><div class="jR" id="stR"></div></div></div></div>
+          <div class="layer dark" id="stDark"></div>
+          <div class="layer vig"></div>
+        </div></div></div>
+      </div>
+      <div class="layer flash" id="stFlash"></div>
+    </div>
     <div class="thread" id="thread"></div>
     <button class="mute-btn" id="muteBtn" title="Toggle narrator voice">🔊</button>
     <div class="icon" id="sceneIcon">📖</div>
@@ -286,7 +340,10 @@ let _currentAudio = null;
 let _audioCtx = null;
 let voiceOn = true;
 const MOOD_RATE = { calm:0.95, alert:1.05, excited:1.1, scared:0.9, triumphant:1.0, mysterious:0.85 };
-function unlockAudio(){ if(_audioCtx) return; try{ _audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+function unlockAudio(){
+  if(!_audioCtx){ try{ _audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume().catch(()=>{});
+}
 async function speak(text, mood){
   if(!voiceOn || !text) return;
   const rate = MOOD_RATE[mood] || 0.95;
@@ -308,7 +365,8 @@ async function speak(text, mood){
     _currentAudio = a;
     await new Promise(resolve=>{
       let done = false;
-      const fin = ()=>{ if(!done){ done = true; resolve(); } };
+      const fin = ()=>{ if(!done){ done = true; Stage.lipsStop(); resolve(); } };
+      Stage.lipsFor(a, ()=> done);
       a.addEventListener('ended', fin);
       a.addEventListener('pause', fin);
       a.addEventListener('error', fin);
@@ -364,6 +422,8 @@ function fireIdle(level){
 function goToSleep(){
   asleep = true;
   clearIdle();
+  WakeLock.off();
+  Stage.setExpr('neutral');
   if(_currentAudio) _currentAudio.pause();
   // log only - the server does not generate anything for level 3
   fetch(`${SUPABASE_URL}/functions/v1/coach`, {
@@ -379,6 +439,7 @@ function goToSleep(){
 }
 function wake(replay){
   asleep = false;
+  WakeLock.on();
   const card = document.getElementById('sleep-card');
   if(card) card.remove();
   idleLevel = 0;
@@ -391,7 +452,7 @@ function wake(replay){
 }
 document.addEventListener('visibilitychange', ()=>{
   if(document.hidden){ clearIdle(); if(_currentAudio) _currentAudio.pause(); }
-  else armIdle();
+  else { armIdle(); if(storyActive() && !asleep) WakeLock.on(); }
 });
 
 // ── STT (Web Speech API) ─────────────────────────────────────
@@ -480,6 +541,7 @@ function removeTyping(){ const t = document.getElementById('typingIndicator'); i
 // ── SPARK SCREEN ──────────────────────────────────────────────
 function showSpark(){
   clearIdle(); asleep = false; idleLevel = 0; idleMaxLevel = 0;
+  Stage.enable(false); WakeLock.off();
   inputbar.style.display = 'none';
   panel.innerHTML = '';
   const last = loadLastSession();
@@ -513,6 +575,8 @@ function showSpark(){
 }
 
 async function startStory(themeKey, label){
+  Stage.enable(themeKey === 'pirate');
+  WakeLock.on();
   setTheme(themeKey);
   panel.innerHTML = '';
   inputbar.style.display = 'flex';
@@ -533,6 +597,8 @@ function continueSession(){
   };
   panel.innerHTML = '';
   inputbar.style.display = 'flex';
+  Stage.enable(state.world === 'pirate' || (!state.world && state.history.some(m=> /\bJuno\b/.test(m.content))));
+  WakeLock.on();
   setTheme(state.theme);
   renderThread();
   state.history.forEach(m=>{
@@ -587,9 +653,14 @@ async function sendTurn(userText, isFirst, idle = 0){
     if(data.error) throw new Error(data.error);
 
     const HOLD_MS = { calm:0, mysterious:200, alert:450, scared:450, triumphant:350, excited:150 };
-    const hold = HOLD_MS[data.mood] || 0;
+    let hold = HOLD_MS[data.mood] || 0;
+    if(Stage.on){
+      Stage.setExpr(data.expression);   // the face reacts first...
+      hold = Math.max(hold, 400);       // ...and the voice comes a moment later
+    }
     if(hold) await new Promise(r=> setTimeout(r, hold));
     removeTyping();
+    if(Stage.on) Stage.fx(data.effect);
 
     const theme = THEMES[data.theme] ? data.theme : state.theme;
     setTheme(theme);
@@ -622,6 +693,7 @@ async function sendTurn(userText, isFirst, idle = 0){
   if(spoken){
     spoken.then(()=>{
       if(myGen !== turnGen) return; // a newer turn already started
+      Stage.settle();
       if(isReal) silenceStartAt = Date.now();
       armIdle();
     });
@@ -632,6 +704,7 @@ async function sendTurn(userText, isFirst, idle = 0){
 
 function endStory(){
   clearIdle();
+  WakeLock.off();
   inputbar.style.display = 'none';
   const div = document.createElement('div');
   div.className = 'msg end-card';
@@ -653,7 +726,159 @@ sendBtn.addEventListener('click', ()=>{
 });
 userInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') sendBtn.click(); });
 userInput.addEventListener('input', childActive);
-userInput.addEventListener('focus', childActive);
+
+// ── WAKE LOCK: keep the screen on while the story is active ──
+const WakeLock = (()=>{
+  let lock = null, want = false;
+  async function grab(){
+    if(!want || lock || document.hidden || !('wakeLock' in navigator)) return;
+    try{ lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', ()=>{ lock = null; }); }
+    catch(e){ lock = null; }
+  }
+  return {
+    on(){ want = true; grab(); },
+    off(){ want = false; if(lock){ lock.release().catch(()=>{}); lock = null; } },
+  };
+})();
+
+// ── STAGE: animated Juno in the captain's cabin (pirate world) ──
+const Stage = (()=>{
+  const EXPR = ['neutral','happy','excited','surprised','scared','sad','confess','shy'];
+  const HEAVY = ['sad','confess'];                 // these stay until the next turn
+  const el = id => document.getElementById(id);
+  const stage = el('stage'), world = el('stWorld'), holder = el('stR');
+  const emote = el('stE'), bob = el('stB'), glow = el('stGlow'), dark = el('stDark');
+  const shakeL = el('stShake'), zoomL = el('stZoom'), flash = el('stFlash');
+  const dust = el('stDust'), dctx = dust.getContext('2d');
+  const imgs = {};
+  let loaded = false, on = false, current = 'neutral', mouthOpen = false, blinking = false;
+  let settleTimer = 0, rafLips = 0, fakeTimer = 0, motes = [], lanternOn = true;
+
+  function load(){
+    if(loaded) return; loaded = true;
+    el('stBg').src = 'cabin.webp';
+    [...EXPR, 'talk', 'blink'].forEach(k=>{
+      const im = new Image();
+      im.className = 'spr' + (k === 'talk' || k === 'blink' ? ' instant' : '');
+      im.alt = ''; im.src = `juno-${k}.webp`;
+      imgs[k] = im; holder.appendChild(im);
+    });
+    scheduleBlink(); flicker(); requestAnimationFrame(drawDust);
+  }
+  function layout(){
+    if(!on) return;
+    const bw = stage.clientWidth, bh = stage.clientHeight;
+    if(!bw || !bh) return;
+    const w = Math.max(bw, bh * 0.75), h = w * 4 / 3;
+    world.style.width = w + 'px'; world.style.height = h + 'px';
+    world.style.left = ((bw - w) / 2) + 'px';
+    world.style.top = Math.min(0, Math.max(bh - h, bh - h * 0.965)) + 'px';   // keep Juno's feet in view
+    const r = Math.min(window.devicePixelRatio || 1, 2);
+    dust.width = Math.round(w * r * 0.5); dust.height = Math.round(h * r * 0.5);
+    motes = Array.from({length: 36}, ()=> mote(true));
+  }
+  function enable(v){
+    on = !!v;
+    document.getElementById('app').classList.toggle('stage-mode', on);
+    if(on){ load(); setExpr('neutral'); requestAnimationFrame(layout); }
+  }
+  function setExpr(k){
+    if(!loaded) return;
+    if(!EXPR.includes(k)) k = 'neutral';
+    clearTimeout(settleTimer);
+    current = k;
+    EXPR.forEach(e => imgs[e].style.opacity = (e === k ? 1 : 0));
+    imgs.talk.style.opacity = 0; imgs.blink.style.opacity = 0; mouthOpen = false; blinking = false;
+    emote.className = 'jE'; void emote.offsetWidth;
+    if(k !== 'neutral') emote.className = 'jE e-' + k;
+    holder.classList.toggle('slow', HEAVY.includes(k));
+  }
+  // after Juno finishes speaking: light feelings fade back to neutral
+  function settle(){
+    clearTimeout(settleTimer);
+    if(!on || current === 'neutral' || HEAVY.includes(current)) return;
+    settleTimer = setTimeout(()=> setExpr('neutral'), 2500);
+  }
+  function setMouth(open){
+    if(open === mouthOpen) return;
+    mouthOpen = open;
+    if(current === 'neutral' && !blinking) imgs.talk.style.opacity = open ? 1 : 0;
+  }
+  function setBob(level){ bob.style.translate = `0 ${(-level * 0.9).toFixed(3)}%`; }
+  function blinkOnce(){
+    if(!on || current !== 'neutral' || mouthOpen) return;
+    blinking = true; imgs.blink.style.opacity = 1;
+    setTimeout(()=>{ imgs.blink.style.opacity = 0; blinking = false; }, 110);
+  }
+  function scheduleBlink(){
+    setTimeout(()=>{ blinkOnce(); if(Math.random() < 0.18) setTimeout(blinkOnce, 260); scheduleBlink(); }, 2400 + Math.random() * 3600);
+  }
+  // lips follow the real voice when the audio context runs; otherwise a fake syllable pattern
+  function lipsFor(audio, isDone){
+    if(!on) return;
+    lipsStop();
+    if(_audioCtx && _audioCtx.state === 'running'){
+      try{
+        const src = _audioCtx.createMediaElementSource(audio);
+        const an = _audioCtx.createAnalyser(); an.fftSize = 1024;
+        src.connect(an); an.connect(_audioCtx.destination);
+        const buf = new Float32Array(an.fftSize);
+        let last = 0, smooth = 0;
+        const tick = (t)=>{
+          if(isDone()){ setMouth(false); setBob(0); return; }
+          an.getFloatTimeDomainData(buf);
+          let sum = 0; for(let i=0;i<buf.length;i++) sum += buf[i]*buf[i];
+          smooth = smooth * 0.6 + Math.sqrt(sum / buf.length) * 0.4;
+          if(t - last > 70){
+            if(!mouthOpen && smooth > 0.045){ setMouth(true); last = t; }
+            else if(mouthOpen && smooth < 0.025){ setMouth(false); last = t; }
+          }
+          setBob(Math.min(1, smooth * 8));
+          rafLips = requestAnimationFrame(tick);
+        };
+        rafLips = requestAnimationFrame(tick);
+        return;
+      }catch(e){ /* fall through to fake lips */ }
+    }
+    let i = 0;
+    const step = ()=>{
+      if(isDone()){ setMouth(false); setBob(0); return; }
+      const open = i++ % 2 === 0;
+      setMouth(open); setBob(open ? 0.6 + Math.random() * 0.4 : 0.1);
+      fakeTimer = setTimeout(step, open ? 110 + Math.random() * 90 : 60 + Math.random() * 70);
+    };
+    step();
+  }
+  function lipsStop(){ cancelAnimationFrame(rafLips); clearTimeout(fakeTimer); if(loaded){ setMouth(false); setBob(0); } }
+  function fx(name){
+    if(!on || !name || name === 'none') return;
+    if(name === 'shake'){ shakeL.classList.remove('on'); void shakeL.offsetWidth; shakeL.classList.add('on'); }
+    if(name === 'lightning'){ flash.classList.remove('on'); void flash.offsetWidth; flash.classList.add('on'); setTimeout(()=> fx('shake'), 120); }
+    if(name === 'lantern'){ lanternOn = false; glow.style.opacity = 0; dark.style.opacity = 1; setTimeout(()=>{ dark.style.opacity = 0; lanternOn = true; }, 2600); }
+    if(name === 'zoom'){ zoomL.classList.add('close'); setTimeout(()=> zoomL.classList.remove('close'), 9000); }
+  }
+  function flicker(){ if(lanternOn) glow.style.opacity = (0.78 + Math.random() * 0.22).toFixed(2); setTimeout(flicker, 80 + Math.random() * 140); }
+  function mote(anywhere){
+    const W = dust.width || 1, H = dust.height || 1, k = W / 450;
+    return { x: W * (0.15 + Math.random() * 0.5), y: anywhere ? H * Math.random() * 0.75 : H * 0.12, r: (0.6 + Math.random() * 1.6) * k,
+             vx: (Math.random() - 0.5) * 0.08 * k, vy: (0.03 + Math.random() * 0.07) * k, a: 0.15 + Math.random() * 0.35, p: Math.random() * 6.28 };
+  }
+  function drawDust(){
+    if(on && !document.hidden){
+      const W = dust.width, H = dust.height;
+      dctx.clearRect(0, 0, W, H);
+      for(const m of motes){
+        m.x += m.vx + Math.sin(m.p += 0.01) * 0.05; m.y += m.vy;
+        if(m.y > H * 0.8 || m.x < 0 || m.x > W) Object.assign(m, mote(false));
+        dctx.globalAlpha = lanternOn ? m.a : m.a * 0.15; dctx.fillStyle = '#ffe2a8';
+        dctx.beginPath(); dctx.arc(m.x, m.y, m.r, 0, 6.283); dctx.fill();
+      }
+    }
+    requestAnimationFrame(drawDust);
+  }
+  window.addEventListener('resize', layout);
+  return { enable, setExpr, settle, lipsFor, lipsStop, fx, get on(){ return on; } };
+})();
 
 // ── SESSION PERSISTENCE (silent, no UI exposure) ─────────────
 const SESSION_KEY = 'fluency_story_session';
