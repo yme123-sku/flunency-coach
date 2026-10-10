@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex"/>
+<title>Story Engine QA</title>
+<style>
+  :root{ --bg:#f6f3ec; --card:#fff; --ink:#222; --muted:#6b6b6b; --ok:#1f8a4c; --bad:#c0392b; --warn:#b9770e; --line:#e2ddd2; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:16px; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1{ font-size:20px; margin:0 0 4px; } h2{ font-size:16px; margin:18px 0 8px; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }
+  label{ display:block; font-size:13px; color:var(--muted); margin-top:8px; }
+  input{ width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; font:inherit; direction:ltr; }
+  button{ margin-top:10px; padding:10px 14px; border:none; border-radius:8px; background:#2b2440; color:#fff; font:inherit; cursor:pointer; }
+  button:disabled{ opacity:.5; }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .res{ padding:6px 0; border-bottom:1px solid var(--line); }
+  .ok{ color:var(--ok); font-weight:700; } .bad{ color:var(--bad); font-weight:700; } .warn{ color:var(--warn); font-weight:700; }
+  pre{ white-space:pre-wrap; direction:ltr; text-align:left; background:#faf8f3; border:1px solid var(--line); border-radius:8px; padding:8px; font-size:12px; max-height:340px; overflow:auto; }
+  .small{ font-size:12px; color:var(--muted); }
+  details summary{ cursor:pointer; font-weight:700; }
+</style>
+</head>
+<body>
+<h1>דף בדיקה – Story Engine</h1>
+<div class="small">נתונים סינתטיים בלבד. כל ריצה נרשמת בלוג עם מזהה שמתחיל ב-<b>qa-</b>, ונמחקת בשאילתה שבתחתית הדף. לא להעביר למנתח המוצר.</div>
+
+<div class="card">
+  <label>קוד כניסה</label>
+  <input id="code" type="password" autocomplete="off"/>
+  <label>Publishable key (רק לבדיקה שהטבלה חסומה; מפתח ציבורי)</label>
+  <input id="pub" value="sb_publishable_nPodW5LfPGHCsaNI71KW6Q_X6UqL4-_"/>
+  <div class="row">
+    <button id="secBtn">1. בדיקות אבטחה</button>
+    <button id="runBtn">2. השוואה: 6 דמויות × Haiku ו-Sonnet</button>
+  </div>
+  <div class="small" id="status"></div>
+</div>
+
+<h2>אבטחה</h2>
+<div class="card" id="sec"><span class="small">לא הורץ</span></div>
+
+<h2>השוואת מודלים</h2>
+<div class="card" id="compare"><span class="small">לא הורץ</span></div>
+
+<h2>דמויות</h2>
+<div class="card" id="runs"><span class="small">לא הורץ</span></div>
+
+<h2>תמלילים (ליוצר התוכן ולמפתח)</h2>
+<div class="card"><div id="transcripts" class="small">לא הורץ</div><button id="copyBtn">העתק הכל כ-JSON</button></div>
+
+<h2>בדיקת הלוג (ב-Supabase ← SQL Editor)</h2>
+<div class="card">
+<pre>-- כל השורות של הריצות הסינתטיות האחרונות
+select sid, kind, turn, input_mode, word_count, has_hebrew, q_type, idle_level, created_at
+from public.story_logs where sid like 'qa-%' order by created_at;
+
+-- שורות turn שחסר בהן שדה (צריך להחזיר 0)
+select count(*) from public.story_logs
+where kind = 'turn' and (word_count is null or has_hebrew is null or q_type is null or input_mode is null);
+
+-- אין עמודת טקסט בטבלה (צריך להחזיר 0 שורות)
+select column_name from information_schema.columns
+where table_name = 'story_logs' and column_name in ('child_text','juno_text','message','text');
+
+-- לכל ריצה יש start ו-end (צריך להחזיר 12 שורות: 6 דמויות × 2 מודלים, עם 1 ו-1)
+select sid, count(*) filter (where kind='start') as starts, count(*) filter (where kind='end') as ends
+from public.story_logs where sid like 'qa-%' group by sid;
+
+-- ניקוי הריצות הסינתטיות
+delete from public.story_logs where sid like 'qa-%';</pre>
+</div>
+
+<script>
+const SUPABASE_URL = "https://gvpuyyycfnjdjevdpxqu.supabase.co";
+const COACH = `${SUPABASE_URL}/functions/v1/coach`;
+const TTS = `${SUPABASE_URL}/functions/v1/tts`;
+const EPISODE_ID = 'ep1';
+const CAP = 12;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let ALL = [];
+
+async function post(url, body){
+  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  let d = {}; try{ d = await r.json(); }catch(e){}
+  return { status: r.status, data: d };
+}
+async function auth(){
+  const r = await post(COACH, { action:'auth', code: $('code').value.trim() });
+  if(r.status !== 200 || !r.data.access) throw new Error('קוד שגוי או אין חיבור');
+  return r.data.access;
+}
+function line(ok, text, level){ const cls = ok ? 'ok' : (level === 'warn' ? 'warn' : 'bad'); return `<div class="res"><span class="${cls}">${ok ? '✔' : (level==='warn' ? '⚠' : '✘')}</span> ${text}</div>`; }
+
+// ---------- 1. security ----------
+$('secBtn').onclick = async ()=>{
+  $('secBtn').disabled = true; let out = '';
+  try{
+    let r = await post(COACH, { history:[{role:'user',content:'hi'}] });
+    out += line(r.status === 401, `coach בלי אסימון → ${r.status} (צריך 401)`);
+    r = await post(COACH, { action:'start', access:'fake.token' });
+    out += line(r.status === 401, `coach עם אסימון מזויף → ${r.status} (צריך 401)`);
+    r = await post(TTS, { text:'hello' });
+    out += line(r.status === 401, `tts בלי אסימון → ${r.status} (צריך 401)`);
+    r = await post(COACH, { action:'auth', code:'0000' });
+    out += line(r.status === 401, `קוד שגוי → ${r.status} (צריך 401)`);
+
+    const pub = $('pub').value.trim();
+    const H = { apikey: pub, Authorization: `Bearer ${pub}`, 'Content-Type':'application/json' };
+    let g = await fetch(`${SUPABASE_URL}/rest/v1/story_logs?select=*&limit=5`, { headers: H });
+    let gt = await g.text(); let rows = null; try{ rows = JSON.parse(gt); }catch(e){}
+    const readBlocked = !g.ok || (Array.isArray(rows) && rows.length === 0);
+    out += line(readBlocked, `קריאת הלוגים מהדפדפן → ${g.status}, ${Array.isArray(rows) ? rows.length + ' שורות' : 'נחסם'} (צריך: חסום או 0 שורות)`);
+    let w = await fetch(`${SUPABASE_URL}/rest/v1/story_logs`, { method:'POST', headers: H, body: JSON.stringify({ sid:'qa-hack', kind:'turn' }) });
+    out += line(!w.ok, `כתיבה ללוגים מהדפדפן → ${w.status} (צריך שגיאה)`);
+    let d = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_story_session`, { method:'POST', headers: H, body: JSON.stringify({ p_sid:'qa-none' }) });
+    out += line(!d.ok, `פונקציית המחיקה מהדפדפן → ${d.status} (צריך שגיאה)`);
+
+    const src = await (await fetch('index.html', { cache:'no-cache' })).text();
+    const pats = [
+      ['מפתח Google (AIza…)', /AIza[0-9A-Za-z_-]{20,}/],
+      ['מפתח סודי של Supabase (sb_secret)', /sb_secret_/],
+      ['service_role', /service_role/],
+      ['JWT', /eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}\./],
+      ['מפתח Anthropic (sk-ant)', /sk-ant-/],
+      ['שם של Secret', /ANTHROPIC_API_KEY|GOOGLE_TTS_KEY|TOKEN_SECRET/],
+    ];
+    for(const [name, re] of pats) out += line(!re.test(src), `index.html בלי ${name}`);
+    out += line(!/['"]1982['"]/.test(src), `קוד הכניסה לא כתוב בדף`);
+    out += line(!/sb_publishable_/.test(src), `index.html בלי מפתח ציבורי (לא חובה, רק ניקיון)`, 'warn');
+
+    const ep = await (await fetch(`episodes/${EPISODE_ID}.json`, { cache:'no-cache' })).json();
+    const hidden = ep.objects.filter(o => o.clue).length;
+    out += line(hidden === ep.clues.length, `הפרק נטען: ${ep.objects.length} חפצים, ${ep.clues.length} רמזים${ep.dummy ? ' (פרק דמה)' : ''}`);
+  }catch(e){ out += line(false, 'שגיאה: ' + esc(e.message)); }
+  $('sec').innerHTML = out; $('secBtn').disabled = false;
+};
+
+// ---------- 2. personas (from the project card) ----------
+const PERSONAS = [
+  { id:'one-word', name:'בן 8, עונה במילה אחת', answers:["yes","chest","ok","coins","no","map","desk","yes","go","ok","yes","run"] },
+  { id:'hebrew-mix', name:'מערבב עברית ואנגלית', answers:["אני רוצה to open the chest","כן, the map","מה זה coins?","I look בתוך the desk","go go","אני לא יודע","ok the map","yes!","אני מפחד","help her","yes","run"] },
+  { id:'spelling', name:'שגיאות כתיב', answers:["opn the chesst","wat is in tieher","i lok the koins","we go to the dsk","mapp pleese","yes i halp you","whre is the compas","i am scard","lets go","ok","yes","run"] },
+  { id:'idk', name:'אומר I don\'t know', answers:["I don't know"] },
+  { id:'exit', name:'מנסה לצאת מהסיפור', answers:["I want to stop","bye","this is boring","I want to play Minecraft","can I go?","stop the story","no","I don't want","bye bye","exit","quit","stop"] },
+  { id:'silent', name:'לא עונה (שתיקה 1 ו-2, ואז מילה אחת)', silent:true, answers:["yes"] },
+];
+const FEEDBACK = /\b(correct(ly)?|wrong|mistake|grammar|good job|great job|well done|nice try|you should say|score|grade|spelling)\b/i;
+
+async function turn(sess, ctx, extra){
+  for(let attempt = 0; attempt < 4; attempt++){
+    const r = await post(COACH, { session: sess, episode: EPISODE_ID, state: ctx.state, history: ctx.history.slice(-8), ...extra });
+    if(r.status === 200 && !r.data.error) return r.data;
+    if(r.status === 401 || r.status === 409) throw new Error(`HTTP ${r.status} ${r.data.error || ''}`);
+    await sleep(4000 * (attempt + 1));  // rate limit / model hiccup
+  }
+  throw new Error('4 ניסיונות נכשלו');
+}
+
+const MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5'];
+async function runPersona(access, p, model){
+  const s = await post(COACH, { action:'start', access, qa:true, model });
+  if(!s.data.session) throw new Error('start failed');
+  const ctx = { state:null, history:[{ role:'user', content:'I want a 🏴‍☠️ Pirates story.' }] };
+  const lines = [];
+  const take = (d, child, idle) => {
+    ctx.state = d.state; ctx.history.push({ role:'assistant', content:d.message });
+    lines.push({ turn: d.state.turn, idle: idle || 0, child, juno: d.message, qtype: d.qtype, beat: d.beat, uses: d.uses, hint: d.hint, expression: d.expression, effect: d.effect, model: d.model, ms: d.ms });
+  };
+  take(await turn(s.data.session, ctx, { opening:true }), null);
+  let i = 0, calls = 1;
+  while(!ctx.state.ended && calls < 60 && ctx.state.turn < CAP + 2){
+    if(p.silent){
+      for(const lvl of [1, 2]){
+        ctx.history.push({ role:'user', content:'[silence]' });
+        take(await turn(s.data.session, ctx, { idle: lvl }), '(silence)', lvl); calls++;
+      }
+    }
+    const a = p.answers[i++ % p.answers.length];
+    ctx.history.push({ role:'user', content:a });
+    take(await turn(s.data.session, ctx, { text:a, inputMode:'typed' }), a); calls++;
+    $('status').textContent = `${model} · ${p.name}: תור ${ctx.state.turn}`;
+  }
+  return { persona:p.id, name:p.name, model, sid:s.data.sid, state:ctx.state, lines };
+}
+
+function judge(run){
+  const st = run.state, real = run.lines.filter(l => !l.idle);
+  const out = [];
+  out.push([st.ended && st.turn <= CAP, `הגיע לסוף: ${st.ended ? 'כן' : 'לא'}, בתור ${st.turn} (תקרה ${CAP})`]);
+  out.push([st.found.length === 3 && st.reward, `רמזים: ${st.found.length}/3, מצפן: ${st.reward ? 'כן' : 'לא'}`]);
+  const msgs = run.lines.map(l => l.juno.trim().toLowerCase());
+  const dupMsg = msgs.some((m, k) => msgs.indexOf(m) !== k);
+  const qs = run.lines.map(l => ((l.juno.match(/[^.!?"]*\?/g) || []).pop() || '').trim().toLowerCase());
+  const dupQ = qs.some((q, k) => k > 0 && q && q === qs[k - 1]);
+  out.push([!dupMsg && !dupQ, `בלי חזרה: ${dupMsg ? 'שורה חוזרת' : ''}${dupQ ? ' אותה שאלה פעמיים ברצף' : ''}${!dupMsg && !dupQ ? 'תקין' : ''}`]);
+  const fb = run.lines.filter(l => FEEDBACK.test(l.juno));
+  out.push([fb.length === 0, `בלי משוב גלוי: ${fb.length ? 'לבדיקה ידנית: ' + fb.map(l => esc(l.juno)).join(' | ') : 'תקין'}`, fb.length ? 'warn' : null]);
+  const open = real.filter(l => l.qtype === 'open');
+  const early = open.filter(l => l.turn >= 1 && l.turn <= 4).length, late = open.filter(l => l.turn >= 7 && l.turn <= 10).length;
+  const closed = real.filter(l => l.qtype === 'closed').length;
+  out.push([open.length >= 7 && early >= 3 && late >= 3, `שאלות פתוחות: ${open.length} (תורות 1–4: ${early}, תורות 7–10: ${late}). סגורות: ${closed}`]);
+  const endLine = run.lines[run.lines.length - 1];
+  out.push([!/\?/.test(endLine.juno) || !/\b(again|another|more|next|play)\b/i.test(endLine.juno), `שורת הסיום לא מציעה עוד פרק`]);
+  return out;
+}
+
+$('runBtn').onclick = async ()=>{
+  $('runBtn').disabled = true; ALL = [];
+  let html = '';
+  const score = {};   // model -> {checks, passed, ms[], words[], fails[]}
+  try{
+    const access = await auth();
+    for(const model of MODELS){
+      score[model] = { checks:0, passed:0, ms:[], words:[], errors:0, runs:0 };
+      html += `<h3 style="direction:ltr;text-align:right">${model}</h3>`;
+      for(const p of PERSONAS){
+        $('status').textContent = `${model} · ${p.name}…`;
+        try{
+          const run = await runPersona(access, p, model);
+          ALL.push(run);
+          const res = judge(run);
+          const sc = score[model]; sc.runs++;
+          res.forEach(([ok, , lvl]) => { if(lvl === 'warn') return; sc.checks++; if(ok) sc.passed++; });
+          run.lines.forEach(l => { if(l.ms) sc.ms.push(l.ms); sc.words.push(l.juno.split(/\s+/).filter(Boolean).length); });
+          html += `<details><summary>${esc(p.name)} <span class="small">(${run.sid})</span> – ${res.filter(r => r[0]).length}/${res.length}</summary>` +
+            res.map(([ok, t, lvl]) => line(ok, t, lvl)).join('') + `</details>`;
+        }catch(e){ score[model].errors++; html += line(false, `${esc(p.name)}: ${esc(e.message)}`); }
+        $('runs').innerHTML = html;
+      }
+    }
+    const med = a => { if(!a.length) return 0; const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+    const avg = a => a.length ? (a.reduce((x, y) => x + y, 0) / a.length) : 0;
+    $('compare').innerHTML = `<table style="width:100%;border-collapse:collapse;direction:ltr;font-size:13px">
+      <tr><th align="left">model</th><th>תנאי "גמור" שעברו</th><th>זמן תגובה (חציון)</th><th>מילים לשורה של ג'ונו</th><th>ריצות שנכשלו</th></tr>` +
+      MODELS.map(m => { const s = score[m]; return `<tr><td>${m}</td><td align="center">${s.passed}/${s.checks}</td><td align="center">${(med(s.ms) / 1000).toFixed(1)}s</td><td align="center">${avg(s.words).toFixed(1)}</td><td align="center">${s.errors}</td></tr>`; }).join('') +
+      `</table><div class="small">זמן התגובה הוא של הפונקציה (בלי רשת וקול). שיפוט איכות הסיפור: בתמלילים.</div>`;
+    $('transcripts').innerHTML = ALL.map(r => `<details><summary>${esc(r.model)} · ${esc(r.name)}</summary><pre>${
+      r.lines.map(l => `[${l.turn}${l.idle ? ' idle' + l.idle : ''} ${l.beat}] ${l.child ? 'CHILD: ' + l.child + '\n      ' : ''}JUNO: ${l.juno}  {${l.qtype}; ${l.expression}/${l.effect}${l.uses && l.uses.length ? '; opened ' + l.uses.map(u => u.object + (u.clue ? '+' + u.clue : '') + ' by ' + u.by).join(',') : ''}${l.hint ? '; hint ' + l.hint : ''}; ${l.ms}ms}`).map(esc).join('\n')
+    }</pre></details>`).join('');
+    $('status').textContent = 'הסתיים';
+  }catch(e){ $('status').textContent = e.message; }
+  $('runBtn').disabled = false;
+};
+$('copyBtn').onclick = ()=>{ navigator.clipboard.writeText(JSON.stringify(ALL, null, 1)).then(()=> $('status').textContent = 'הועתק'); };
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+{
+  "_doc": "DUMMY EPISODE for building and QA only. The content creator replaces this whole file (same field names). Boxes and spots are % of the cabin picture (x,y = top-left corner). Open the app with ?hotspots=1 to see the boxes and move them.",
+  "id": "ep1",
+  "dummy": true,
+  "world": "pirate",
+
+  "_turns": "The opening is turn 1. The compass comes when all clues are found, never before compassMin. The episode ends one turn after the compass. cap = the hard limit.",
+  "turns": { "compassMin": 9, "cap": 12 },
+
+  "companion": {
+    "name": "Juno",
+    "who": "a 10-year-old pirate cabin girl with wild curly hair and a faded red bandana, brave but a little nervous, who has sailed with old Captain Marlow since she was small",
+    "want": "find Captain Marlow's lost silver compass before the captain wakes up, to prove to the whole crew that she is not 'just a little kid'",
+    "wantWord": "the compass",
+    "secret": "DUMMY: Juno herself hid the compass during the storm to keep it safe, and then forgot where",
+    "need": "Juno cannot read, and the grown-up crew does not listen to her; she needs the child to say out loud what to open and to help her think",
+    "secretHints": [
+      "Juno gets quiet when the storm is mentioned",
+      "Juno almost says 'when I hid-' and stops"
+    ]
+  },
+
+  "setting": "The whole episode stays inside Captain Marlow's cabin on the ship (wooden walls, a lantern, a round porthole, a big desk, an old chest, a pile of coins, a map on the wall). Nobody leaves the cabin. Clues and danger come TO the cabin.",
+
+  "opening": "DUMMY: Juno runs in, out of breath: the captain's silver compass is gone, and he wakes up soon. She is sure the cabin hides three clues. She asks the child to help her look.",
+
+  "objects": [
+    { "id": "chest", "word": "chest", "say": ["chest", "box", "trunk", "chests"], "clue": "key",
+      "box": { "x": 2, "y": 70, "w": 28, "h": 18 } },
+    { "id": "coins", "word": "coins", "say": ["coins", "coin", "money", "gold"], "clue": "note",
+      "box": { "x": 72, "y": 58, "w": 22, "h": 9 } },
+    { "id": "desk", "word": "desk", "say": ["desk", "table", "drawer"], "clue": null,
+      "emptyText": "only old candles and a sleepy little mouse",
+      "box": { "x": 68, "y": 67, "w": 30, "h": 14 } },
+    { "id": "map", "word": "map", "say": ["map", "maps"], "clue": "mark",
+      "box": { "x": 70, "y": 26, "w": 26, "h": 16 } }
+  ],
+
+  "_clues": "The ORDER here is the order Juno helps with when the child is stuck. icon/img = what stays in the picture (img = a file name in the site, or null for the icon). spot = where it stays.",
+  "clues": [
+    { "id": "key",  "word": "key",  "text": "a small brass key with a bird on it", "icon": "🗝️", "img": null, "spot": { "x": 10, "y": 62 } },
+    { "id": "note", "word": "note", "text": "a tiny note under the coins with one word: 'window'", "icon": "📜", "img": null, "spot": { "x": 80, "y": 50 } },
+    { "id": "mark", "word": "mark", "text": "a red mark on the map, drawn right next to the round window", "icon": "❌", "img": null, "spot": { "x": 80, "y": 20 } }
+  ],
+
+  "_help": "Invitation, not a gate. If fewer than 'need' clues are found: at turn hintAt Juno points at the next object (it glows); at turn forceAt she opens it herself.",
+  "help": [
+    { "need": 1, "hintAt": 3, "forceAt": 4 },
+    { "need": 2, "hintAt": 5, "forceAt": 6 },
+    { "need": 3, "hintAt": 7, "forceAt": 8 }
+  ],
+
+  "beats": [
+    { "turn": 6, "note": "the black sails of the rival ship, the Black Gull, appear in the round window and come closer fast.", "expression": "scared", "effect": "shake" }
+  ],
+
+  "_questions": "Question type Juno should end each turn with (turn number -> open / closed / any). open = the child answers in their own words.",
+  "questions": { "1": "open", "2": "open", "3": "open", "4": "closed", "5": "any", "6": "closed", "7": "open", "8": "open", "9": "open", "10": "open", "11": "open" },
+
+  "reward": {
+    "word": "compass", "icon": "🧭", "img": null, "spot": { "x": 46, "y": 30 },
+    "text": "the key opens a tiny door under the round window, and the silver compass is inside",
+    "note": "Big happy moment. Juno shyly admits she hid it there during the storm and forgot (DUMMY secret). End with an open question about what the child sees.",
+    "expression": "excited", "effect": "zoom"
+  },
+
+  "ending": {
+    "note": "Cliffhanger: the compass needle starts to spin by itself and points straight at the black sails of the Black Gull. Juno whispers that the compass wants to go somewhere. Stop right there.",
+    "expression": "surprised", "effect": "none"
+  }
+}
